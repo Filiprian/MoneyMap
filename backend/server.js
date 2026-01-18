@@ -11,7 +11,7 @@ app.use(express.json()) // Passing req body
 
 // Safety and security
 app.use(helmet());
-app.use(cors({ origin: 'http://localhost:3000' })); // or your frontend URL
+app.use(cors());
 // Rate limiting
 app.use(rateLimit({
   windowMs: 15 * 60 * 1000,

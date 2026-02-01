@@ -21,6 +21,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Dashboard language={language} />} />
             <Route path="/transactions" element={<Transactions language={language} />} />
+            <Route path="/budgets" element={<Budgets language={language} />} />
           </Routes>
         </main>
       </div>

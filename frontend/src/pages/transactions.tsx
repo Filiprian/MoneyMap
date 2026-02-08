@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline"; 
 
 interface TransactionsProps {
   language: 'CZ' | 'EN';
@@ -30,6 +31,7 @@ const translations = {
     cat_job: "Práce",
     cat_investment: "Investice",
     cat_gift: "Dar",
+    really_delete: "Opravdu smazat?"
   },
   EN: {
     transactionsTitle: "Transactions",
@@ -56,6 +58,7 @@ const translations = {
     cat_job: "Job",
     cat_investment: "Investment",
     cat_gift: "Gift",
+    really_delete: "Really delete?"
   },
 };
 
@@ -70,6 +73,10 @@ export default function Transactions({ language }: TransactionsProps) {
     month: 0,
     year: 0,
   });
+
+  // New states
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const t = translations[language];
 
@@ -86,35 +93,84 @@ export default function Transactions({ language }: TransactionsProps) {
     fetchAllTransactions();
   }, []);
 
-  async function addTransaction(data: typeof sendData) {
-    if (!data.amount || !data.category || !data.day || !data.month || !data.year) {
+  // Delete transaction
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(t.really_delete)) return;
+
+    try {
+      const res = await fetch(`http://localhost:3000/transactions/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setAllTransactions(prev => prev.filter(tx => tx._id !== id));
+      } else {
+        alert("Failed to delete transaction");
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Error deleting transaction");
+    }
+  };
+
+  // Edit transaction
+  const handleEditClick = (tx: any) => {
+    const isInc = tx.amount > 0;
+    setIsIncome(isInc);
+    setEditingId(tx._id);    
+    setIsEditing(true);
+
+    const absAmount = Math.abs(tx.amount);
+
+    setSendData({
+      amount: absAmount,
+      category: tx.category,
+      notes: tx.notes || '',
+      day: tx.day,
+      month: tx.month,
+      year: tx.year,
+    });
+  };
+
+  async function saveTransaction(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!sendData.amount || !sendData.category || !sendData.day || !sendData.month || !sendData.year) {
       alert(t.requiredFields);
       return;
     }
 
-    const amountToSend = isIncome ? data.amount : -data.amount;
-    const bodyToSend = { ...data, amount: amountToSend };
+    const amountToSend = isIncome ? sendData.amount : -sendData.amount;
+    const bodyToSend = { ...sendData, amount: amountToSend };
+
+    const url = isEditing
+      ? `http://localhost:3000/transactions/${editingId}`
+      : 'http://localhost:3000/transactions';
+
+    const method = isEditing ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch('http://localhost:3000/transactions', {
-        method: 'POST',
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyToSend),
       });
 
       if (res.ok) {
-        console.log('Transaction added successfully');
-        setSendData({
-          amount: 0,
-          category: '',
-          notes: '',
-          day: 0,
-          month: 0,
-          year: 0,
-        });
+        // Refresh list
+        const fresh = await fetch('http://localhost:3000/transactions').then(r => r.json());
+        setAllTransactions(fresh || []);
+
+        // Reset form
+        setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
+        setIsEditing(false);
+        setEditingId(null);
+      } else {
+        alert(isEditing ? "Update failed" : "Add failed");
       }
     } catch (err) {
-      console.error('Failed to add transaction', err);
+      console.error("Save failed", err);
+      alert("Error saving transaction");
     }
   }
 
@@ -128,21 +184,41 @@ export default function Transactions({ language }: TransactionsProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
           <h2 className="text-2xl font-bold mb-6">{t.allTransactions}</h2>
-          <div className="space-y-4">
-            {allTransactions.slice(-8).map((tx: any) => (
+          <div className="space-y-4 max-h-[500px] overflow-y-auto"> {/* optional: scrollable */}
+            {allTransactions.slice(-15).map((tx: any) => (   // increased limit a bit
               <div
-                key={tx.id}
-                className="flex justify-between items-center py-3 border-b border-gray-700 last:border-b-0"
+                key={tx._id}
+                className="flex justify-between items-center py-3 border-b border-gray-700 last:border-b-0 group"
               >
                 <span className={`text-xl font-semibold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toLocaleString()} Kč
                 </span>
+
                 <span className="text-gray-300">
                   {t[`cat_${tx.category.toLowerCase()}`] || tx.category}
                 </span>
-                <span className="text-gray-500">
-                  {tx.day}.{tx.month} {tx.year}
-                </span>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-500">
+                    {tx.day}.{tx.month}.{tx.year}
+                  </span>
+
+                  <button
+                    onClick={() => handleEditClick(tx)}
+                    className="text-blue-400 hover:text-blue-300 opacity-70 group-hover:opacity-100 transition-opacity"
+                    title="Edit"
+                  >
+                    <PencilIcon className="w-5 h-5" />
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(tx._id)}
+                    className="text-red-400 hover:text-red-300 opacity-70 group-hover:opacity-100 transition-opacity"
+                    title="Delete"
+                  >
+                    <TrashIcon className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -153,24 +229,19 @@ export default function Transactions({ language }: TransactionsProps) {
         </section>
 
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
-          <h2 className="text-2xl font-bold mb-6">{t.addTransaction}</h2>
+          <h2 className="text-2xl font-bold mb-6">
+            {isEditing ? (language === 'CZ' ? "Upravit transakci" : "Edit Transaction") : t.addTransaction}
+          </h2>
 
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addTransaction(sendData);
-            }}
-          >
+          <form className="space-y-4" onSubmit={saveTransaction}>
+            {/* Type toggle */}
             <label className="block text-gray-300 mb-2">{t.type}</label>
             <div className="flex">
               <button
                 type="button"
                 onClick={() => setIsIncome(true)}
                 className={`cursor-pointer w-full p-2 rounded-l ${
-                  isIncome
-                    ? 'bg-green-500 text-white border border-gray-600'
-                    : 'bg-gray-700 text-gray-100 border border-gray-600'
+                  isIncome ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-100'
                 }`}
               >
                 {t.income}
@@ -179,9 +250,7 @@ export default function Transactions({ language }: TransactionsProps) {
                 type="button"
                 onClick={() => setIsIncome(false)}
                 className={`cursor-pointer w-full p-2 rounded-r ${
-                  !isIncome
-                    ? 'bg-red-500 text-white border border-gray-600'
-                    : 'bg-gray-700 text-gray-100 border border-gray-600'
+                  !isIncome ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-100'
                 }`}
               >
                 {t.expense}
@@ -192,10 +261,8 @@ export default function Transactions({ language }: TransactionsProps) {
               <label className="block text-gray-300 mb-2">{t.amount}</label>
               <input
                 type="number"
-                value={sendData.amount}
-                onChange={(e) =>
-                  setSendData((prev) => ({ ...prev, amount: Number(e.target.value) }))
-                }
+                value={sendData.amount || ''}
+                onChange={(e) => setSendData(prev => ({ ...prev, amount: Number(e.target.value) }))}
                 className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
               />
             </div>
@@ -204,31 +271,27 @@ export default function Transactions({ language }: TransactionsProps) {
               <label className="block text-gray-300 mb-2">{t.category}</label>
               {isIncome ? (
                 <select
-                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
                   value={sendData.category}
-                  onChange={(e) =>
-                    setSendData((prev) => ({ ...prev, category: e.target.value }))
-                  }
+                  onChange={(e) => setSendData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
                 >
-                  <option value="job">Job</option>
-                  <option value="investment">Investment</option>
-                  <option value="gift">Gift</option>
-                  <option value="other">Other</option>
+                  <option value="job">{t.cat_job}</option>
+                  <option value="investment">{t.cat_investment}</option>
+                  <option value="gift">{t.cat_gift}</option>
+                  <option value="other">{t.cat_other}</option>
                 </select>
               ) : (
                 <select
-                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
                   value={sendData.category}
-                  onChange={(e) =>
-                    setSendData((prev) => ({ ...prev, category: e.target.value }))
-                  }
+                  onChange={(e) => setSendData(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
                 >
-                  <option value="food">Food</option>
-                  <option value="housing">Housing</option>
-                  <option value="transportation">Transportation</option>
-                  <option value="entertainment">Entertainment</option>
-                  <option value="health">Health</option>
-                  <option value="other">Other</option>
+                  <option value="food">{t.cat_food}</option>
+                  <option value="housing">{t.cat_housing}</option>
+                  <option value="transportation">{t.cat_transportation}</option>
+                  <option value="entertainment">{t.cat_entertainment}</option>
+                  <option value="health">{t.cat_health}</option>
+                  <option value="other">{t.cat_other}</option>
                 </select>
               )}
             </div>
@@ -237,11 +300,9 @@ export default function Transactions({ language }: TransactionsProps) {
               <label className="block text-gray-300 mb-2">{t.notes}</label>
               <input
                 type="text"
-                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
                 value={sendData.notes}
-                onChange={(e) =>
-                  setSendData((prev) => ({ ...prev, notes: e.target.value }))
-                }
+                onChange={(e) => setSendData(prev => ({ ...prev, notes: e.target.value }))}
+                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
               />
             </div>
 
@@ -249,14 +310,17 @@ export default function Transactions({ language }: TransactionsProps) {
               <label className="block text-gray-300 mb-2">{t.date}</label>
               <input
                 type="date"
-                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
-                value={`${sendData.year}-${String(sendData.month).padStart(2, '0')}-${String(
-                  sendData.day
-                ).padStart(2, '0')}`}
+                value={
+                  sendData.year && sendData.month && sendData.day
+                    ? `${sendData.year}-${String(sendData.month).padStart(2, '0')}-${String(sendData.day).padStart(2, '0')}`
+                    : ''
+                }
                 onChange={(e) => {
-                  const [year, month, day] = e.target.value.split('-').map(Number);
-                  setSendData((prev) => ({ ...prev, day, month, year }));
+                  if (!e.target.value) return;
+                  const [y, m, d] = e.target.value.split('-').map(Number);
+                  setSendData(prev => ({ ...prev, year: y, month: m, day: d }));
                 }}
+                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
               />
             </div>
 
@@ -264,8 +328,24 @@ export default function Transactions({ language }: TransactionsProps) {
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             >
-              {t.addButton}
+              {isEditing
+                ? (language === 'CZ' ? "Uložit změny" : "Save Changes")
+                : t.addButton}
             </button>
+
+            {isEditing && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditingId(null);
+                  setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
+                }}
+                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mt-2"
+              >
+                {language === 'CZ' ? "Zrušit" : "Cancel"}
+              </button>
+            )}
           </form>
         </section>
       </div>

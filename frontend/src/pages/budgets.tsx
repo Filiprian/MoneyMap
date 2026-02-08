@@ -1,5 +1,6 @@
 // budgets.tsx
 import { useEffect, useState } from "react";
+import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 
 interface BudgetsProps {
   language: 'CZ' | 'EN';
@@ -11,12 +12,16 @@ const translations = {
     budgetsSubtitle: "Zde můžete prohlížet a nastavovat měsíční rozpočty",
     allBudgetsThisMonth: "Rozpočty pro tento měsíc:",
     addBudget: "Přidat rozpočet",
+    editBudget: "Upravit rozpočet",
     category: "Kategorie:",
     plannedAmount: "Částka:",
     notes: "Poznámky:",
     addButton: "Přidat rozpočet",
+    saveChanges: "Uložit změny",
+    cancel: "Zrušit",
     noBudgets: "Zatím žádné rozpočty pro tento měsíc...",
     requiredFields: "Vyplňte prosím všechna povinná pole.",
+    reallyDelete: "Opravdu smazat tento rozpočet?",
     // Categories
     cat_food: "Jídlo",
     cat_housing: "Bydlení",
@@ -30,11 +35,16 @@ const translations = {
     budgetsSubtitle: "Here you can view and set monthly budgets",
     allBudgetsThisMonth: "Budgets for this month:",
     addBudget: "Add budget",
+    editBudget: "Edit budget",
     category: "Category:",
     plannedAmount: "Amount:",
+    notes: "Notes:",
     addButton: "Add Budget",
+    saveChanges: "Save Changes",
+    cancel: "Cancel",
     noBudgets: "No budgets for this month yet...",
     requiredFields: "Please fill in all required fields.",
+    reallyDelete: "Really delete this budget?",
     // Categories
     cat_food: "Food",
     cat_housing: "Housing",
@@ -48,12 +58,13 @@ const translations = {
 export default function Budgets({ language }: BudgetsProps) {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const [sendData, setSendData] = useState({
     category: '',
     amount: 0,
     notes: '',
-    month: 0,
-    year: 0,
   });
 
   const t = translations[language];
@@ -82,7 +93,6 @@ export default function Budgets({ language }: BudgetsProps) {
     fetchData();
   }, []);
 
-  // Expenses grouped by category (current month only)
   const expensesByCategory = transactions
     .filter(tx => 
       tx.month === currentMonth && 
@@ -95,7 +105,6 @@ export default function Budgets({ language }: BudgetsProps) {
       return acc;
     }, {});
 
-  // Current month's budgets
   const currentBudgets = budgets.filter(
     b => b.month === currentMonth && b.year === currentYear
   );
@@ -112,22 +121,31 @@ export default function Budgets({ language }: BudgetsProps) {
     return 'bg-green-500';
   };
 
-  async function addBudget(data: typeof sendData) {
-    if (!data.amount || !data.category) {
+  async function saveBudget(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!sendData.amount || !sendData.category) {
       alert(t.requiredFields);
       return;
     }
 
     const bodyToSend = {
-      ...data,
-      amount: Math.abs(data.amount), // always positive
+      category: sendData.category,
+      amount: Math.abs(sendData.amount),
+      notes: sendData.notes || '',
       month: currentMonth,
       year: currentYear,
     };
 
+    const url = isEditing && editingId
+      ? `http://localhost:3000/budgets/${editingId}`
+      : 'http://localhost:3000/budgets';
+
+    const method = isEditing ? 'PUT' : 'POST';
+
     try {
-      const res = await fetch('http://localhost:3000/budgets', {
-        method: 'POST',
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bodyToSend),
       });
@@ -139,12 +157,54 @@ export default function Budgets({ language }: BudgetsProps) {
         setBudgets(newData || []);
 
         // Reset form
-        setSendData({ amount: 0, category: '', notes: '', month: 0, year: 0 });
+        setSendData({ category: '', amount: 0, notes: '' });
+        setIsEditing(false);
+        setEditingId(null);
+      } else {
+        alert(isEditing ? "Update failed" : "Add failed");
       }
     } catch (err) {
-      console.error('Failed to add budget', err);
+      console.error("Save failed", err);
+      alert("Error saving budget");
     }
   }
+
+  const handleEditClick = (budget: any) => {
+    setIsEditing(true);
+    setEditingId(budget._id || budget.id);
+
+    setSendData({
+      category: budget.category.toLowerCase(),
+      amount: Number(budget.amount),
+      notes: budget.notes || '',
+    });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm(t.reallyDelete)) return;
+
+    try {
+      const res = await fetch(`http://localhost:3000/budgets/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        setBudgets(prev => prev.filter(b => (b._id || b.id) !== id));
+      } else {
+        alert("Failed to delete budget");
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Error deleting budget");
+    }
+  };
+
+  const resetForm = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    setSendData({ category: '', amount: 0, notes: '' });
+  };
+
   return (
     <div>
       <h1 className="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight">
@@ -167,15 +227,34 @@ export default function Budgets({ language }: BudgetsProps) {
                 const safePercentage = Math.min(percentage, 100);
 
                 return (
-                  <div key={budget._id || budget.id} className="space-y-2">
+                  <div key={budget._id || budget.id} className="space-y-2 group relative">
                     <div className="flex justify-between items-center">
                       <span className="text-lg font-medium text-gray-200">
                         {getCategoryName(budget.category)}
                       </span>
-                      <span className="text-sm text-gray-400">
-                        {spent.toLocaleString()} / {budgetAmount.toLocaleString()} Kč
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-400">
+                          {spent.toLocaleString()} / {budgetAmount.toLocaleString()} Kč
+                        </span>
+
+                        <button
+                          onClick={() => handleEditClick(budget)}
+                          className="text-blue-400 hover:text-blue-300 opacity-60 group-hover:opacity-100 transition-opacity"
+                          title="Edit"
+                        >
+                          <PencilIcon className="w-5 h-5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(budget._id || budget.id)}
+                          className="text-red-400 hover:text-red-300 opacity-60 group-hover:opacity-100 transition-opacity"
+                          title="Delete"
+                        >
+                          <TrashIcon className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
+
                     <div className="w-full bg-gray-700 rounded-full h-3">
                       <div
                         className={`h-3 rounded-full transition-all duration-300 ${getProgressColor(safePercentage)}`}
@@ -197,17 +276,13 @@ export default function Budgets({ language }: BudgetsProps) {
           </div>
         </section>
 
-        {/* RIGHT – Add new budget */}
+        {/* RIGHT – Add / Edit budget */}
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
-          <h2 className="text-2xl font-bold mb-6">{t.addBudget}</h2>
+          <h2 className="text-2xl font-bold mb-6">
+            {isEditing ? t.editBudget : t.addBudget}
+          </h2>
 
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              addBudget({ ...sendData, month: currentMonth, year: currentYear });
-            }}
-          >
+          <form className="space-y-4" onSubmit={saveBudget}>
             <div>
               <label className="block text-gray-300 mb-2">{t.category}</label>
               <select
@@ -231,7 +306,7 @@ export default function Budgets({ language }: BudgetsProps) {
               <input
                 type="number"
                 min="0"
-                value={sendData.amount}
+                value={sendData.amount || ''}
                 onChange={(e) =>
                   setSendData((prev) => ({ ...prev, amount: Number(e.target.value) }))
                 }
@@ -240,7 +315,7 @@ export default function Budgets({ language }: BudgetsProps) {
               />
             </div>
 
-            {/* Month & Year are auto-filled from current date */}
+            {/* Hidden – we always use current month/year */}
             <input type="hidden" name="month" value={currentMonth} />
             <input type="hidden" name="year" value={currentYear} />
 
@@ -248,8 +323,18 @@ export default function Budgets({ language }: BudgetsProps) {
               type="submit"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             >
-              {t.addButton}
+              {isEditing ? t.saveChanges : t.addButton}
             </button>
+
+            {isEditing && (
+              <button
+                type="button"
+                onClick={resetForm}
+                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mt-2"
+              >
+                {t.cancel}
+              </button>
+            )}
           </form>
         </section>
       </div>

@@ -20,7 +20,6 @@ export default function CurrentMonthExpensePie({
   language,
   getCategoryName,
 }: CurrentMonthExpensePieProps) {
-  const currentMonthKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
   const categoryMap: Record<string, number> = {};
 
@@ -83,9 +82,12 @@ export default function CurrentMonthExpensePie({
             cy="50%"
             outerRadius={110}
             innerRadius={60}
-            label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+            label={({ name, percent }) => {
+              const percentage = percent != null ? (percent * 100).toFixed(0) : '0';
+              return `${name} (${percentage}%)`;
+            }}
           >
-            {data.map((entry, index) => (
+            {data.map((_, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
             ))}
           </Pie>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline"; 
+import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 
 interface TransactionsProps {
   language: 'CZ' | 'EN';
@@ -21,7 +21,6 @@ const translations = {
     addButton: "Přidat transakci",
     noTransactions: "Zatím žádné transakce...",
     requiredFields: "Vyplňte prosím všechna povinná pole.",
-    // Categories (display names)
     cat_food: "Jídlo",
     cat_housing: "Bydlení",
     cat_transportation: "Doprava",
@@ -31,7 +30,8 @@ const translations = {
     cat_job: "Práce",
     cat_investment: "Investice",
     cat_gift: "Dar",
-    really_delete: "Opravdu smazat?"
+    really_delete: "Opravdu smazat?",
+    show_more: "Zobrazit více",
   },
   EN: {
     transactionsTitle: "Transactions",
@@ -48,7 +48,6 @@ const translations = {
     addButton: "Add Transaction",
     noTransactions: "No transactions yet...",
     requiredFields: "Please fill in all required fields.",
-    // Categories (display names)
     cat_food: "Food",
     cat_housing: "Housing",
     cat_transportation: "Transportation",
@@ -58,7 +57,8 @@ const translations = {
     cat_job: "Job",
     cat_investment: "Investment",
     cat_gift: "Gift",
-    really_delete: "Really delete?"
+    really_delete: "Really delete?",
+    show_more: "Show more",
   },
 };
 
@@ -74,11 +74,16 @@ export default function Transactions({ language }: TransactionsProps) {
     year: 0,
   });
 
-  // New states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(15);
 
   const t = translations[language];
+
+  const getCategoryName = (cat: string) => {
+    const key = `cat_${cat.toLowerCase()}`;
+    return (t as any)[key] || cat.charAt(0).toUpperCase() + cat.slice(1);
+  };
 
   useEffect(() => {
     async function fetchAllTransactions() {
@@ -93,7 +98,6 @@ export default function Transactions({ language }: TransactionsProps) {
     fetchAllTransactions();
   }, []);
 
-  // Delete transaction
   const handleDelete = async (id: string) => {
     if (!window.confirm(t.really_delete)) return;
 
@@ -113,11 +117,10 @@ export default function Transactions({ language }: TransactionsProps) {
     }
   };
 
-  // Edit transaction
   const handleEditClick = (tx: any) => {
     const isInc = tx.amount > 0;
     setIsIncome(isInc);
-    setEditingId(tx._id);    
+    setEditingId(tx._id);
     setIsEditing(true);
 
     const absAmount = Math.abs(tx.amount);
@@ -157,11 +160,9 @@ export default function Transactions({ language }: TransactionsProps) {
       });
 
       if (res.ok) {
-        // Refresh list
         const fresh = await fetch('http://localhost:3000/transactions').then(r => r.json());
         setAllTransactions(fresh || []);
 
-        // Reset form
         setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
         setIsEditing(false);
         setEditingId(null);
@@ -174,6 +175,16 @@ export default function Transactions({ language }: TransactionsProps) {
     }
   }
 
+  const sortedTransactions = [...allTransactions].sort((a, b) => {
+    const dateA = new Date(a.year, a.month - 1, a.day);
+    const dateB = new Date(b.year, b.month - 1, b.day);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  const handleShowMore = () => {
+    setVisibleCount(prev => prev + 15);
+  };
+
   return (
     <div>
       <h1 className="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight">
@@ -184,86 +195,100 @@ export default function Transactions({ language }: TransactionsProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
           <h2 className="text-2xl font-bold mb-6">{t.allTransactions}</h2>
-          <div className="space-y-4 max-h-[500px] overflow-y-auto"> {/* optional: scrollable */}
-            {allTransactions.slice(-15).map((tx: any) => (   // increased limit a bit
+          <div className="space-y-4">
+            {sortedTransactions.slice(0, visibleCount).map((tx: any) => (
               <div
-                key={tx._id}
-                className="flex justify-between items-center py-3 border-b border-gray-700 last:border-b-0 group"
+                key={tx._id || tx.id}
+                className="flex justify-between items-center py-3 border-b border-gray-700 last:border-b-0 group hover:bg-gray-700/40 transition-colors"
               >
                 <span className={`text-xl font-semibold ${tx.amount > 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {tx.amount > 0 ? '+' : ''}{Number(tx.amount).toLocaleString()} Kč
                 </span>
-
                 <span className="text-gray-300">
-                  {t[`cat_${tx.category.toLowerCase()}`] || tx.category}
+                  {getCategoryName(tx.category)}
                 </span>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-500">
-                    {tx.day}.{tx.month}.{tx.year}
-                  </span>
-
+                <span className="text-gray-500">
+                  {tx.day}.{tx.month}.{tx.year}
+                </span>
+                <div className="flex space-x-3 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     onClick={() => handleEditClick(tx)}
-                    className="text-blue-400 hover:text-blue-300 opacity-70 group-hover:opacity-100 transition-opacity"
-                    title="Edit"
+                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                    title="Upravit"
                   >
-                    <PencilIcon className="w-5 h-5" />
+                    <PencilIcon className="w-6 h-6" />
                   </button>
-
                   <button
                     onClick={() => handleDelete(tx._id)}
-                    className="text-red-400 hover:text-red-300 opacity-70 group-hover:opacity-100 transition-opacity"
-                    title="Delete"
+                    className="text-red-400 hover:text-red-300 transition-colors"
+                    title="Smazat"
                   >
-                    <TrashIcon className="w-5 h-5" />
+                    <TrashIcon className="w-6 h-6" />
                   </button>
                 </div>
               </div>
             ))}
 
             {allTransactions.length === 0 && (
-              <p className="text-gray-500 text-center py-8">{t.noTransactions}</p>
+              <p className="text-gray-500 text-center py-12">{t.noTransactions}</p>
+            )}
+
+            {visibleCount < sortedTransactions.length && (
+              <button
+                onClick={handleShowMore}
+                className="w-full mt-8 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+              >
+                {t.show_more}
+              </button>
             )}
           </div>
         </section>
 
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
           <h2 className="text-2xl font-bold mb-6">
-            {isEditing ? (language === 'CZ' ? "Upravit transakci" : "Edit Transaction") : t.addTransaction}
+            {isEditing
+              ? (language === 'CZ' ? "Upravit transakci" : "Edit Transaction")
+              : t.addTransaction}
           </h2>
 
-          <form className="space-y-4" onSubmit={saveTransaction}>
-            {/* Type toggle */}
-            <label className="block text-gray-300 mb-2">{t.type}</label>
-            <div className="flex">
-              <button
-                type="button"
-                onClick={() => setIsIncome(true)}
-                className={`cursor-pointer w-full p-2 rounded-l ${
-                  isIncome ? 'bg-green-500 text-white' : 'bg-gray-700 text-gray-100'
-                }`}
-              >
-                {t.income}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsIncome(false)}
-                className={`cursor-pointer w-full p-2 rounded-r ${
-                  !isIncome ? 'bg-red-500 text-white' : 'bg-gray-700 text-gray-100'
-                }`}
-              >
-                {t.expense}
-              </button>
+          <form className="space-y-5" onSubmit={saveTransaction}>
+            <div>
+              <label className="block text-gray-300 mb-2">{t.type}</label>
+              <div className="flex rounded overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setIsIncome(true)}
+                  className={`flex-1 py-3 font-medium transition-colors ${
+                    isIncome
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {t.income}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsIncome(false)}
+                  className={`flex-1 py-3 font-medium transition-colors ${
+                    !isIncome
+                      ? 'bg-red-600 text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {t.expense}
+                </button>
+              </div>
             </div>
 
             <div>
               <label className="block text-gray-300 mb-2">{t.amount}</label>
               <input
                 type="number"
+                step="0.01"
                 value={sendData.amount || ''}
                 onChange={(e) => setSendData(prev => ({ ...prev, amount: Number(e.target.value) }))}
-                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
+                className="w-full p-3 rounded bg-gray-700 text-gray-100 border border-gray-600 focus:border-blue-500 focus:outline-none"
+                placeholder="0.00"
               />
             </div>
 
@@ -273,8 +298,9 @@ export default function Transactions({ language }: TransactionsProps) {
                 <select
                   value={sendData.category}
                   onChange={(e) => setSendData(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
+                  className="w-full p-3 rounded bg-gray-700 text-gray-100 border border-gray-600 focus:border-blue-500 focus:outline-none"
                 >
+                  <option value="">{language === 'CZ' ? "Vyberte kategorii" : "Select category"}</option>
                   <option value="job">{t.cat_job}</option>
                   <option value="investment">{t.cat_investment}</option>
                   <option value="gift">{t.cat_gift}</option>
@@ -284,8 +310,9 @@ export default function Transactions({ language }: TransactionsProps) {
                 <select
                   value={sendData.category}
                   onChange={(e) => setSendData(prev => ({ ...prev, category: e.target.value }))}
-                  className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
+                  className="w-full p-3 rounded bg-gray-700 text-gray-100 border border-gray-600 focus:border-blue-500 focus:outline-none"
                 >
+                  <option value="">{language === 'CZ' ? "Vyberte kategorii" : "Select category"}</option>
                   <option value="food">{t.cat_food}</option>
                   <option value="housing">{t.cat_housing}</option>
                   <option value="transportation">{t.cat_transportation}</option>
@@ -294,16 +321,6 @@ export default function Transactions({ language }: TransactionsProps) {
                   <option value="other">{t.cat_other}</option>
                 </select>
               )}
-            </div>
-
-            <div>
-              <label className="block text-gray-300 mb-2">{t.notes}</label>
-              <input
-                type="text"
-                value={sendData.notes}
-                onChange={(e) => setSendData(prev => ({ ...prev, notes: e.target.value }))}
-                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
-              />
             </div>
 
             <div>
@@ -320,13 +337,13 @@ export default function Transactions({ language }: TransactionsProps) {
                   const [y, m, d] = e.target.value.split('-').map(Number);
                   setSendData(prev => ({ ...prev, year: y, month: m, day: d }));
                 }}
-                className="w-full p-2 rounded bg-gray-700 text-gray-100 border border-gray-600"
+                className="w-full p-3 rounded bg-gray-700 text-gray-100 border border-gray-600 focus:border-blue-500 focus:outline-none"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded transition-colors mt-4 cursor-pointer"
             >
               {isEditing
                 ? (language === 'CZ' ? "Uložit změny" : "Save Changes")
@@ -341,7 +358,7 @@ export default function Transactions({ language }: TransactionsProps) {
                   setEditingId(null);
                   setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
                 }}
-                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mt-2"
+                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded transition-colors mt-2 cursor-pointer"
               >
                 {language === 'CZ' ? "Zrušit" : "Cancel"}
               </button>

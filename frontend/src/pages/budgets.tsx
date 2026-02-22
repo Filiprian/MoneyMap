@@ -321,7 +321,7 @@ export default function Budgets({ language }: BudgetsProps) {
 
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
             >
               {isEditing ? t.saveChanges : t.addButton}
             </button>
@@ -330,7 +330,7 @@ export default function Budgets({ language }: BudgetsProps) {
               <button
                 type="button"
                 onClick={resetForm}
-                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mt-2"
+                className="w-full bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded mt-2 cursor-pointer"
               >
                 {t.cancel}
               </button>

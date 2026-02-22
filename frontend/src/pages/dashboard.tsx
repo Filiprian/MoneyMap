@@ -90,7 +90,6 @@ export default function Dashboard({ language }: DashboardProps) {
     .filter(tx => tx.month === currentMonth && tx.year === currentYear && Number(tx.amount) < 0)
     .reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0);
 
-  // Monthly budgets with spent amounts
   const expensesByCategory = transactions
     .filter(tx => tx.month === currentMonth && tx.year === currentYear && Number(tx.amount) < 0)
     .reduce((acc: Record<string, number>, tx) => {
@@ -114,6 +113,13 @@ export default function Dashboard({ language }: DashboardProps) {
     if (percentage >= 60) return 'bg-yellow-500';
     return 'bg-green-500';
   };
+
+  // Sort transactions newest first
+  const sortedTransactions = [...transactions].sort((a, b) => {
+    const dateA = new Date(a.year, a.month - 1, a.day);
+    const dateB = new Date(b.year, b.month - 1, b.day);
+    return dateB.getTime() - dateA.getTime();
+  });
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -148,7 +154,7 @@ export default function Dashboard({ language }: DashboardProps) {
         <section className="bg-gray-800/60 rounded-2xl p-6 shadow-xl border border-gray-700">
           <h2 className="text-2xl font-bold mb-6">{t.recentTransactions}</h2>
           <div className="space-y-4 max-h-[420px] overflow-y-auto">
-            {transactions.slice(-8).map((tx: any) => (
+            {sortedTransactions.slice(0, 8).map((tx: any) => (
               <div
                 key={tx._id || tx.id}
                 className="flex justify-between items-center py-3 border-b border-gray-700 last:border-b-0"

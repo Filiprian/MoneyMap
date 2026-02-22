@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import TotalChart from "../components/totalChart";
 import IncomeExpenseChart from "../components/incomeExpenseChart";
 import ExpensesChart from "../components/expensesChart";
+import { db } from './../Db';
 
 interface GraphsProps {
   language: 'CZ' | 'EN';
@@ -43,17 +44,15 @@ export default function Graphs({ language }: GraphsProps) {
 
   const getCategoryName = (cat: string) => {
     const key = cat.toLowerCase();
-    return t[key] || key.charAt(0).toUpperCase() + key.slice(1);
+    return (t as any)[key] || key.charAt(0).toUpperCase() + key.slice(1);
   };
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [txRes] = await Promise.all([
-          fetch('http://localhost:3000/transactions'),
-        ]);
-
-        const txData = await txRes.json();
+        // [MongoDB] const txRes = await fetch('http://localhost:3000/transactions');
+        // [MongoDB] const txData = await txRes.json();
+        const txData = await db.transactions.toArray();
         setTransactions(txData || []);
       } catch (err) {
         console.error('Failed to fetch dashboard data', err);

@@ -1,6 +1,11 @@
 // budgets.tsx
 import { useEffect, useState } from "react";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { db } from './../Db';
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
 
 interface BudgetsProps {
   language: 'CZ' | 'EN';
@@ -22,7 +27,6 @@ const translations = {
     noBudgets: "Zatím žádné rozpočty pro tento měsíc...",
     requiredFields: "Vyplňte prosím všechna povinná pole.",
     reallyDelete: "Opravdu smazat tento rozpočet?",
-    // Categories
     cat_food: "Jídlo",
     cat_housing: "Bydlení",
     cat_transportation: "Doprava",
@@ -45,7 +49,6 @@ const translations = {
     noBudgets: "No budgets for this month yet...",
     requiredFields: "Please fill in all required fields.",
     reallyDelete: "Really delete this budget?",
-    // Categories
     cat_food: "Food",
     cat_housing: "Housing",
     cat_transportation: "Transportation",
@@ -73,30 +76,35 @@ export default function Budgets({ language }: BudgetsProps) {
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [budgetRes, txRes] = await Promise.all([
-          fetch('http://localhost:3000/budgets'),
-          fetch('http://localhost:3000/transactions'),
-        ]);
+  // ── Fetch budgets & transactions ────────────────────────────────────────────
+  async function fetchData() {
+    try {
+      // [MongoDB] const [budgetRes, txRes] = await Promise.all([
+      // [MongoDB]   fetch('http://localhost:3000/budgets'),
+      // [MongoDB]   fetch('http://localhost:3000/transactions'),
+      // [MongoDB] ]);
+      // [MongoDB] const budgetData = await budgetRes.json();
+      // [MongoDB] const txData = await txRes.json();
+      const [budgetData, txData] = await Promise.all([
+        db.budgets.toArray(),
+        db.transactions.toArray(),
+      ]);
 
-        const budgetData = await budgetRes.json();
-        const txData = await txRes.json();
-
-        setBudgets(budgetData || []);
-        setTransactions(txData || []);
-      } catch (err) {
-        console.error('Failed to fetch data', err);
-      }
+      setBudgets(budgetData || []);
+      setTransactions(txData || []);
+    } catch (err) {
+      console.error('Failed to fetch data', err);
     }
+  }
+
+  useEffect(() => {
     fetchData();
   }, []);
 
   const expensesByCategory = transactions
-    .filter(tx => 
-      tx.month === currentMonth && 
-      tx.year === currentYear && 
+    .filter(tx =>
+      tx.month === currentMonth &&
+      tx.year === currentYear &&
       Number(tx.amount) < 0
     )
     .reduce((acc: Record<string, number>, tx) => {
@@ -121,6 +129,7 @@ export default function Budgets({ language }: BudgetsProps) {
     return 'bg-green-500';
   };
 
+  // ── Save (add or update) ────────────────────────────────────────────────────
   async function saveBudget(e: React.FormEvent) {
     e.preventDefault();
 
@@ -137,32 +146,20 @@ export default function Budgets({ language }: BudgetsProps) {
       year: currentYear,
     };
 
-    const url = isEditing && editingId
-      ? `http://localhost:3000/budgets/${editingId}`
-      : 'http://localhost:3000/budgets';
-
-    const method = isEditing ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyToSend),
-      });
-
-      if (res.ok) {
-        // Refresh budgets
-        const newRes = await fetch('http://localhost:3000/budgets');
-        const newData = await newRes.json();
-        setBudgets(newData || []);
-
-        // Reset form
-        setSendData({ category: '', amount: 0, notes: '' });
-        setIsEditing(false);
-        setEditingId(null);
+      if (isEditing && editingId) {
+        // [MongoDB] await fetch(`http://localhost:3000/budgets/${editingId}`, { method: 'PUT', ... });
+        await db.budgets.update(editingId, bodyToSend);
       } else {
-        alert(isEditing ? "Update failed" : "Add failed");
+        // [MongoDB] await fetch('http://localhost:3000/budgets', { method: 'POST', ... });
+        const newId = generateId();
+        await db.budgets.add({ ...bodyToSend, _id: newId });
       }
+
+      await fetchData();
+      setSendData({ category: '', amount: 0, notes: '' });
+      setIsEditing(false);
+      setEditingId(null);
     } catch (err) {
       console.error("Save failed", err);
       alert("Error saving budget");
@@ -180,19 +177,14 @@ export default function Budgets({ language }: BudgetsProps) {
     });
   };
 
+  // ── Delete ──────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
     if (!window.confirm(t.reallyDelete)) return;
 
     try {
-      const res = await fetch(`http://localhost:3000/budgets/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (res.ok) {
-        setBudgets(prev => prev.filter(b => (b._id || b.id) !== id));
-      } else {
-        alert("Failed to delete budget");
-      }
+      // [MongoDB] await fetch(`http://localhost:3000/budgets/${id}`, { method: 'DELETE' });
+      await db.budgets.delete(id);
+      setBudgets(prev => prev.filter(b => (b._id || b.id) !== id));
     } catch (err) {
       console.error("Delete failed", err);
       alert("Error deleting budget");
@@ -292,12 +284,12 @@ export default function Budgets({ language }: BudgetsProps) {
                   setSendData((prev) => ({ ...prev, category: e.target.value }))
                 }
               >
-                <option value="food">Food / Jídlo</option>
-                <option value="housing">Housing / Bydlení</option>
-                <option value="transportation">Transportation / Doprava</option>
-                <option value="entertainment">Entertainment / Zábava</option>
-                <option value="health">Health / Zdraví</option>
-                <option value="other">Other / Ostatní</option>
+                <option value="food">{t.cat_food}</option>
+                <option value="housing">{t.cat_housing}</option>
+                <option value="transportation">{t.cat_transportation}</option>
+                <option value="entertainment">{t.cat_entertainment}</option>
+                <option value="health">{t.cat_health}</option>
+                <option value="other">{t.cat_other}</option>
               </select>
             </div>
 
@@ -314,10 +306,6 @@ export default function Budgets({ language }: BudgetsProps) {
                 placeholder="např. 5000"
               />
             </div>
-
-            {/* Hidden – we always use current month/year */}
-            <input type="hidden" name="month" value={currentMonth} />
-            <input type="hidden" name="year" value={currentYear} />
 
             <button
               type="submit"

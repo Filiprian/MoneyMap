@@ -1,5 +1,6 @@
 // dashboard.tsx
 import { useEffect, useState } from 'react';
+import { db } from './../Db';
 
 interface DashboardProps {
   language: 'CZ' | 'EN';
@@ -16,7 +17,6 @@ const translations = {
     monthlyBudgets: 'Měsíční rozpočty',
     noTransactions: 'Zatím žádné transakce...',
     noBudgets: 'Zatím žádné rozpočty pro tento měsíc...',
-    // Categories
     cat_food: 'Jídlo',
     cat_housing: 'Bydlení',
     cat_transportation: 'Doprava',
@@ -37,7 +37,6 @@ const translations = {
     monthlyBudgets: 'Monthly Budgets',
     noTransactions: 'No transactions yet...',
     noBudgets: 'No budgets for this month yet...',
-    // Categories
     cat_food: 'Food',
     cat_housing: 'Housing',
     cat_transportation: 'Transportation',
@@ -62,13 +61,16 @@ export default function Dashboard({ language }: DashboardProps) {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [txRes, budgetRes] = await Promise.all([
-          fetch('http://localhost:3000/transactions'),
-          fetch('http://localhost:3000/budgets'),
+        // [MongoDB] const [txRes, budgetRes] = await Promise.all([
+        // [MongoDB]   fetch('http://localhost:3000/transactions'),
+        // [MongoDB]   fetch('http://localhost:3000/budgets'),
+        // [MongoDB] ]);
+        // [MongoDB] const txData = await txRes.json();
+        // [MongoDB] const budgetData = await budgetRes.json();
+        const [txData, budgetData] = await Promise.all([
+          db.transactions.toArray(),
+          db.budgets.toArray(),
         ]);
-
-        const txData = await txRes.json();
-        const budgetData = await budgetRes.json();
 
         setTransactions(txData || []);
         setBudgets(budgetData || []);

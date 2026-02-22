@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { db } from './../Db';
+
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
 
 interface TransactionsProps {
   language: 'CZ' | 'EN';
@@ -85,48 +90,42 @@ export default function Transactions({ language }: TransactionsProps) {
     return (t as any)[key] || cat.charAt(0).toUpperCase() + cat.slice(1);
   };
 
+  // ── Fetch all transactions ──────────────────────────────────────────────────
+  async function fetchAllTransactions() {
+    // [MongoDB] const res = await fetch('http://localhost:3000/transactions');
+    // [MongoDB] const data = await res.json();
+    const data = await db.transactions.toArray();
+    setAllTransactions(data || []);
+  }
+
   useEffect(() => {
-    async function fetchAllTransactions() {
-      try {
-        const res = await fetch('http://localhost:3000/transactions');
-        const data = await res.json();
-        setAllTransactions(data || []);
-      } catch (err) {
-        console.error('Failed to fetch transactions', err);
-      }
-    }
-    fetchAllTransactions();
+    fetchAllTransactions().catch(err => console.error('Failed to fetch transactions', err));
   }, []);
 
+  // ── Delete ──────────────────────────────────────────────────────────────────
   const handleDelete = async (id: string) => {
     if (!window.confirm(t.really_delete)) return;
 
     try {
-      const res = await fetch(`http://localhost:3000/transactions/${id}`, {
-        method: 'DELETE',
-      });
-
-      if (res.ok) {
-        setAllTransactions(prev => prev.filter(tx => tx._id !== id));
-      } else {
-        alert("Failed to delete transaction");
-      }
+      // [MongoDB] const res = await fetch(`http://localhost:3000/transactions/${id}`, { method: 'DELETE' });
+      // [MongoDB] if (res.ok) { setAllTransactions(prev => prev.filter(tx => tx._id !== id)); }
+      await db.transactions.delete(id);
+      setAllTransactions(prev => prev.filter(tx => tx._id !== id));
     } catch (err) {
       console.error("Delete failed", err);
       alert("Error deleting transaction");
     }
   };
 
+  // ── Edit ────────────────────────────────────────────────────────────────────
   const handleEditClick = (tx: any) => {
     const isInc = tx.amount > 0;
     setIsIncome(isInc);
     setEditingId(tx._id);
     setIsEditing(true);
 
-    const absAmount = Math.abs(tx.amount);
-
     setSendData({
-      amount: absAmount,
+      amount: Math.abs(tx.amount),
       category: tx.category,
       notes: tx.notes || '',
       day: tx.day,
@@ -135,6 +134,7 @@ export default function Transactions({ language }: TransactionsProps) {
     });
   };
 
+  // ── Save (add or update) ────────────────────────────────────────────────────
   async function saveTransaction(e: React.FormEvent) {
     e.preventDefault();
 
@@ -146,29 +146,20 @@ export default function Transactions({ language }: TransactionsProps) {
     const amountToSend = isIncome ? sendData.amount : -sendData.amount;
     const bodyToSend = { ...sendData, amount: amountToSend };
 
-    const url = isEditing
-      ? `http://localhost:3000/transactions/${editingId}`
-      : 'http://localhost:3000/transactions';
-
-    const method = isEditing ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyToSend),
-      });
-
-      if (res.ok) {
-        const fresh = await fetch('http://localhost:3000/transactions').then(r => r.json());
-        setAllTransactions(fresh || []);
-
-        setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
-        setIsEditing(false);
-        setEditingId(null);
+      if (isEditing && editingId) {
+        // [MongoDB] await fetch(`http://localhost:3000/transactions/${editingId}`, { method: 'PUT', ... });
+        await db.transactions.update(editingId, bodyToSend);
       } else {
-        alert(isEditing ? "Update failed" : "Add failed");
+        // [MongoDB] await fetch('http://localhost:3000/transactions', { method: 'POST', ... });
+        const newId = generateId();
+        await db.transactions.add({ ...bodyToSend, _id: newId });
       }
+
+      await fetchAllTransactions();
+      setSendData({ amount: 0, category: '', notes: '', day: 0, month: 0, year: 0 });
+      setIsEditing(false);
+      setEditingId(null);
     } catch (err) {
       console.error("Save failed", err);
       alert("Error saving transaction");
